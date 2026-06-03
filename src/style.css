@@ -12,16 +12,15 @@
   --accent: #1a1a1a;
   --user-bubble: #1a1a1a;
   --user-text: #ffffff;
-  --bot-bubble: #f0f0f0;
   --chip-bg: #ffffff;
   --chip-border: rgba(0,0,0,0.08);
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.05), 0 2px 4px rgba(0,0,0,0.02);
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.03);
-  --radius-sm: 12px;
-  --radius-md: 18px;
-  --radius-lg: 24px;
-  --radius-xl: 28px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 18px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -74,14 +73,6 @@ button, textarea, input { font: inherit; }
   box-shadow: none;
 }
 
-.hero-icon {
-  font-size: 2rem;
-  color: var(--accent);
-  display: block;
-  margin-bottom: 6px;
-  line-height: 1;
-}
-
 .eyebrow {
   margin: 0;
   font-size: 0.78rem;
@@ -117,7 +108,7 @@ h1 {
   align-items: center;
   gap: 6px;
   padding: 5px 13px;
-  border-radius: 999px;
+  border-radius: 20px;
   background: rgba(0,0,0,0.04);
   color: var(--text-secondary);
   font-size: 0.78rem;
@@ -149,13 +140,33 @@ h1 {
   padding: 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   overflow-y: auto;
+  max-height: calc(100vh - 280px);
+  min-height: 300px;
   background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
-  min-height: 100px;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+.chat-window::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-window::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-window::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+
+.chat-window::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 /* ─── Messages ─── */
@@ -182,12 +193,12 @@ h1 {
 }
 
 .bubble {
-  padding: 11px 16px;
+  padding: 10px 14px;
   border-radius: var(--radius-lg);
-  line-height: 1.65;
+  line-height: 1.55;
   word-break: break-word;
   white-space: pre-wrap;
-  font-size: 0.945rem;
+  font-size: 0.92rem;
 }
 
 .message.user .bubble {
@@ -197,53 +208,59 @@ h1 {
   border-bottom-right-radius: 6px;
   max-width: 72%;
   box-shadow: var(--shadow-sm);
-  font-size: 0.925rem;
 }
 
 .message.bot .bubble {
-  background: var(--bot-bubble);
+  background: transparent;
   color: var(--text-primary);
-  padding: 11px 16px;
   max-width: 90%;
-  font-size: 0.945rem;
-  box-shadow: var(--shadow-sm);
-}
-
-/* ─── Bot avatar star ─── */
-.bot-icon {
-  color: var(--accent);
-  font-size: 1.1rem;
-  margin-bottom: 6px;
-  display: block;
-  line-height: 1;
+  margin-bottom: 2px;
+  padding-bottom: 6px;
 }
 
 /* ─── Message actions ─── */
 .message-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 2px;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.message:hover .message-actions {
+  opacity: 1;
 }
 
 .action-button {
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 0.9rem;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: all 0.15s ease;
   line-height: 1;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .action-button:hover {
-  background: rgba(0,0,0,0.04);
+  background: rgba(0,0,0,0.06);
   color: var(--text-primary);
-  border-color: var(--border);
+  border-color: var(--text-muted);
+  transform: scale(1.02);
+}
+
+.action-button:active {
+  transform: scale(0.98);
+}
+
+.action-button svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
 }
 
 /* ─── Input section ─── */
@@ -256,12 +273,15 @@ h1 {
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
+  margin-top: auto;
 }
 
 .input-card::before {
   content: '';
   position: absolute;
-  top: -32px; left: 0; right: 0; height: 32px;
+  bottom: 100%;
+  left: 0; right: 0;
+  height: 32px;
   background: linear-gradient(to bottom, transparent, var(--bg));
   pointer-events: none;
 }
@@ -272,7 +292,7 @@ h1 {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-md);
-  padding: 12px 14px;
+  padding: 10px 14px;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -287,19 +307,20 @@ h1 {
 
 .prompt-input {
   width: 100%;
-  min-height: 26px;
+  min-height: 24px;
   max-height: 180px;
   resize: none;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.95rem;
-  line-height: 1.55;
+  font-size: 0.92rem;
+  line-height: 1.5;
   outline: none;
   overflow-y: auto;
   flex-basis: 100%;
   order: 1;
+  font-family: inherit;
 }
 
 .prompt-input::placeholder {
@@ -309,7 +330,7 @@ h1 {
 .input-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   order: 2;
 }
@@ -317,32 +338,39 @@ h1 {
 .plus-button {
   background: none;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  width: 28px; height: 28px;
-  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1.1rem;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.15s ease;
   flex-shrink: 0;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
 }
 
 .plus-button:hover {
   background: var(--surface-hover);
   border-color: var(--border);
+  transform: scale(1.02);
 }
 
 .icon-button {
   background: none;
   border: none;
-  border-radius: 8px;
-  width: 32px; height: 32px;
-  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: all 0.15s ease;
   padding: 0;
   flex-shrink: 0;
 }
@@ -350,70 +378,98 @@ h1 {
 .icon-button:hover {
   background: rgba(0,0,0,0.04);
   color: var(--text-primary);
+  transform: scale(1.02);
 }
 
 .icon-button svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
 }
 
 .send-button {
   background: var(--accent);
   border: none;
-  border-radius: 6px;
+  border-radius: 10px;
   padding: 6px 14px;
   font-size: 0.78rem;
   color: white;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
   flex-shrink: 0;
   margin-left: auto;
 }
 
 .send-button:hover {
   background: rgba(0,0,0,0.85);
+  transform: scale(1.02);
 }
 
-/* ─── Loading ─── */
+.send-button:active {
+  transform: scale(0.98);
+}
+
+/* ─── Loading indicator ─── */
 .loading-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 24px 0;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 24px;
   font-size: 0.82rem;
   color: var(--text-muted);
+  background: transparent;
 }
 
-.loading-indicator.hidden { display: none; }
+.loading-indicator.hidden {
+  display: none;
+}
 
 .loader {
-  width: 14px; height: 14px;
+  width: 16px;
+  height: 16px;
   border: 2px solid rgba(0,0,0,0.1);
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 /* ─── Disclaimer ─── */
 .disclaimer {
   text-align: center;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--text-muted);
   padding: 0;
-  margin: 0;
+  margin: 4px 0 0;
 }
 
 /* ─── Responsive ─── */
 @media (max-width: 600px) {
-  .hero-card { padding: 48px 16px 24px; }
-  h1 { font-size: 1.75rem; }
-  .chat-window { padding: 16px; }
-  .input-card { padding: 10px 10px 16px; }
-  .message.user .bubble { max-width: 88%; }
+  .hero-card {
+    padding: 48px 16px 24px;
+  }
+  
+  h1 {
+    font-size: 1.75rem;
+  }
+  
+  .chat-window {
+    padding: 16px;
+    max-height: calc(100vh - 240px);
+  }
+  
+  .input-card {
+    padding: 10px 12px 14px;
+  }
+  
+  .message.user .bubble {
+    max-width: 88%;
+  }
 }
 
 /* ─── Dark mode ─── */
@@ -430,7 +486,6 @@ h1 {
     --accent: #f5f5f5;
     --user-bubble: #f5f5f5;
     --user-text: #0f0f0f;
-    --bot-bubble: #242424;
     --chip-bg: #1a1a1a;
     --chip-border: rgba(255,255,255,0.08);
   }
