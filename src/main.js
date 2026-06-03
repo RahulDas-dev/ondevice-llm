@@ -5,7 +5,7 @@ const app = document.querySelector('#app')
 app.innerHTML = `
   <main class="chat-app">
     <section class="hero-card" id="heroCard">
-      <span class="hero-icon">✶</span>
+      <span class="hero-icon">*</span>
       <p class="eyebrow">Evening, Rahul</p>
       <h1>How can I help you today?</h1>
       <div class="status-row">
@@ -26,17 +26,11 @@ app.innerHTML = `
         <div class="input-actions">
           <button type="button" class="plus-button" id="plusButton" aria-label="Add attachment">+</button>
           <span class="model-badge">Sonnet 4.6  Low</span>
-          <button type="button" class="icon-button" aria-label="Voice input">🎤</button>
-          <button type="button" class="icon-button" aria-label="Signal">📶</button>
+          <button type="button" class="icon-button" aria-label="Voice input">MIC</button>
+          <button type="button" class="icon-button" aria-label="Signal">NET</button>
+          <button type="submit" class="send-button" aria-label="Send message">Send</button>
         </div>
       </form>
-      <div class="chips">
-        <button type="button" class="chip">Code</button>
-        <button type="button" class="chip">Write</button>
-        <button type="button" class="chip">Learn</button>
-        <button type="button" class="chip">Life stuff</button>
-        <button type="button" class="chip">From Drive</button>
-      </div>
       <p class="disclaimer">Claude is AI and can make mistakes. Please double-check responses.</p>
     </section>
   </main>
@@ -47,11 +41,11 @@ const chatWindow = document.querySelector('#chatWindow')
 const chatForm = document.querySelector('#chatForm')
 const promptInput = document.querySelector('#promptInput')
 const heroCard = document.querySelector('#heroCard')
-const chips = document.querySelectorAll('.chip')
 const plusButton = document.querySelector('#plusButton')
 const loadingIndicator = document.querySelector('#loadingIndicator')
 let browserSession = null
 let hasMessages = false
+let isStreaming = false
 
 // Auto-resize textarea
 promptInput.addEventListener('input', () => {
@@ -65,13 +59,6 @@ promptInput.addEventListener('keydown', (e) => {
     e.preventDefault()
     chatForm.dispatchEvent(new Event('submit'))
   }
-})
-
-chips.forEach((chip) => {
-  chip.addEventListener('click', () => {
-    promptInput.value = chip.textContent.replace(/^[^\w\s]+\s*/, '').trim()
-    promptInput.focus()
-  })
 })
 
 plusButton.addEventListener('click', () => promptInput.focus())
@@ -88,18 +75,17 @@ function setLoading(visible) {
 function createActionRow() {
   const row = document.createElement('div')
   row.className = 'message-actions'
-  const icons = [
-    { icon: '⎕', label: 'Copy' },
-    { icon: '▷', label: 'Play' },
-    { icon: '↑', label: 'Thumbs up' },
-    { icon: '↓', label: 'Thumbs down' },
-    { icon: '↻', label: 'Regenerate' },
+  const actions = [
+    { label: 'Copy', text: 'COPY' },
+    { label: 'Regenerate', text: 'REGEN' },
+    { label: 'Thumbs up', text: 'LIKE' },
+    { label: 'Thumbs down', text: 'DISLIKE' },
   ]
-  icons.forEach(({ icon, label }) => {
+  actions.forEach(({ text, label }) => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'action-button'
-    button.textContent = icon
+    button.textContent = text
     button.setAttribute('aria-label', label)
     row.appendChild(button)
   })
@@ -113,30 +99,53 @@ function hideHero() {
   }
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, isStreaming = false) {
   hideHero()
 
   const message = document.createElement('div')
   message.className = `message ${role}`
+  message.id = `message-${Date.now()}-${Math.random()}`
 
   if (role === 'bot') {
     const star = document.createElement('span')
     star.className = 'bot-icon'
-    star.textContent = '✶'
+    star.textContent = '*'
     message.appendChild(star)
   }
 
   const bubble = document.createElement('div')
   bubble.className = 'bubble'
   bubble.textContent = text
+  bubble.id = `bubble-${message.id}`
   message.appendChild(bubble)
 
-  if (role === 'bot') {
+  if (role === 'bot' && !isStreaming) {
     message.appendChild(createActionRow())
   }
 
   chatWindow.appendChild(message)
+  scrollToBottom()
+  
+  return message
+}
+
+function updateMessage(messageId, text) {
+  const bubble = document.querySelector(`#bubble-${messageId}`)
+  if (bubble) {
+    bubble.textContent = text
+    scrollToBottom()
+  }
+}
+
+function scrollToBottom() {
   chatWindow.scrollTop = chatWindow.scrollHeight
+}
+
+function addActionsToMessage(messageId) {
+  const message = document.querySelector(`#${messageId}`)
+  if (message && !message.querySelector('.message-actions')) {
+    message.appendChild(createActionRow())
+  }
 }
 
 async function initModel() {
@@ -174,7 +183,7 @@ async function initModel() {
 chatForm.addEventListener('submit', async (event) => {
   event.preventDefault()
   const prompt = promptInput.value.trim()
-  if (!prompt) return
+  if (!prompt || isStreaming) return
 
   appendMessage('user', prompt)
   promptInput.value = ''
@@ -189,11 +198,33 @@ chatForm.addEventListener('submit', async (event) => {
   setStatus('Generating…', true)
   setLoading(true)
   promptInput.disabled = true
+  isStreaming = true
 
   try {
-    const result = await browserSession.prompt(prompt)
-    const output = typeof result === 'string' ? result : result?.output || JSON.stringify(result)
-    appendMessage('bot', output)
+    // Create bot message container
+    const botMessage = appendMessage('bot', '', true)
+    const messageId = botMessage.id
+    let fullResponse = ''
+
+    // Check if streaming is supported
+    if (browserSession.promptStreaming) {
+      // Use streaming API
+      const stream = await browserSession.promptStreaming(prompt)
+      
+      for await (const chunk of stream) {
+        fullResponse += chunk
+        updateMessage(messageId, fullResponse)
+      }
+    } else {
+      // Fallback to regular prompt
+      const result = await browserSession.prompt(prompt)
+      fullResponse = typeof result === 'string' ? result : result?.output || JSON.stringify(result)
+      updateMessage(messageId, fullResponse)
+    }
+
+    // Add action buttons after streaming is complete
+    addActionsToMessage(messageId)
+    
     setStatus('Model ready', false)
   } catch (error) {
     console.error('Prompt error:', error)
@@ -202,6 +233,7 @@ chatForm.addEventListener('submit', async (event) => {
   } finally {
     setLoading(false)
     promptInput.disabled = false
+    isStreaming = false
   }
 })
 
