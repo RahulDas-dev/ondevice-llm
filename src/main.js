@@ -41,7 +41,7 @@ app.innerHTML = `
           <button type="submit" class="send-button" aria-label="Send message">Send</button>
         </div>
       </form>
-      <p class="disclaimer">Claude is AI and can make mistakes. Please double-check responses.</p>
+      <p class="disclaimer">AI and can make mistakes. Please double-check responses.</p>
     </section>
   </main>
 `
