@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Tiempos+Text:ital,wght@0,400;0,500;1,400&display=swap');
 
 :root {
-  --bg: #f0ede8;
+  --bg: #faf8f5;
   --surface: #ffffff;
   --surface-hover: #f7f5f2;
   --border: rgba(0,0,0,0.1);
@@ -325,24 +325,6 @@ h1 {
 
 .plus-button:hover {
   background: var(--surface-hover);
-}
-
-.model-badge {
-  margin-left: auto;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
-
-.model-badge::after {
-  content: 'v';
-  font-size: 0.7rem;
-  opacity: 0.6;
-  margin-top: 1px;
 }
 
 .icon-button {
