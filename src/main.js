@@ -135,7 +135,9 @@ function updateMessage(messageId, text) {
 }
 
 function scrollToBottom() {
-  chatWindow.scrollTop = chatWindow.scrollHeight
+  setTimeout(() => {
+    chatWindow.scrollTop = chatWindow.scrollHeight
+  }, 0)
 }
 
 function addActionsToMessage(messageId) {
