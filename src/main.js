@@ -25,7 +25,6 @@ app.innerHTML = `
         <textarea id="promptInput" class="prompt-input" rows="1" placeholder="Write a message…" required></textarea>
         <div class="input-actions">
           <button type="button" class="plus-button" id="plusButton" aria-label="Add attachment">+</button>
-          <span class="model-badge">Sonnet 4.6  Low</span>
           <button type="button" class="icon-button" aria-label="Voice input">MIC</button>
           <button type="button" class="icon-button" aria-label="Signal">NET</button>
           <button type="submit" class="send-button" aria-label="Send message">Send</button>
@@ -78,8 +77,6 @@ function createActionRow() {
   const actions = [
     { label: 'Copy', text: 'COPY' },
     { label: 'Regenerate', text: 'REGEN' },
-    { label: 'Thumbs up', text: 'LIKE' },
-    { label: 'Thumbs down', text: 'DISLIKE' },
   ]
   actions.forEach(({ text, label }) => {
     const button = document.createElement('button')
