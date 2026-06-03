@@ -25,8 +25,19 @@ app.innerHTML = `
         <textarea id="promptInput" class="prompt-input" rows="1" placeholder="Write a message…" required></textarea>
         <div class="input-actions">
           <button type="button" class="plus-button" id="plusButton" aria-label="Add attachment">+</button>
-          <button type="button" class="icon-button" aria-label="Voice input">MIC</button>
-          <button type="button" class="icon-button" aria-label="Signal">NET</button>
+          <button type="button" class="icon-button" aria-label="Voice input" title="Voice input">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v12a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <button type="button" class="icon-button" aria-label="Signal" title="Network">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 20h20M4 20V8a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v12M9 12h6M9 16h6"/>
+            </svg>
+          </button>
           <button type="submit" class="send-button" aria-label="Send message">Send</button>
         </div>
       </form>
@@ -45,6 +56,7 @@ const loadingIndicator = document.querySelector('#loadingIndicator')
 let browserSession = null
 let hasMessages = false
 let isStreaming = false
+let messageCounter = 0
 
 // Auto-resize textarea
 promptInput.addEventListener('input', () => {
@@ -75,15 +87,16 @@ function createActionRow() {
   const row = document.createElement('div')
   row.className = 'message-actions'
   const actions = [
-    { label: 'Copy', text: 'COPY' },
-    { label: 'Regenerate', text: 'REGEN' },
+    { label: 'Copy', icon: '📋' },
+    { label: 'Regenerate', icon: '🔄' },
   ]
-  actions.forEach(({ text, label }) => {
+  actions.forEach(({ icon, label }) => {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'action-button'
-    button.textContent = text
+    button.textContent = icon
     button.setAttribute('aria-label', label)
+    button.setAttribute('title', label)
     row.appendChild(button)
   })
   return row
@@ -101,7 +114,8 @@ function appendMessage(role, text, isStreaming = false) {
 
   const message = document.createElement('div')
   message.className = `message ${role}`
-  message.id = `message-${Date.now()}-${Math.random()}`
+  messageCounter++
+  message.setAttribute('data-message-id', messageCounter)
 
   if (role === 'bot') {
     const star = document.createElement('span')
@@ -113,7 +127,6 @@ function appendMessage(role, text, isStreaming = false) {
   const bubble = document.createElement('div')
   bubble.className = 'bubble'
   bubble.textContent = text
-  bubble.id = `bubble-${message.id}`
   message.appendChild(bubble)
 
   if (role === 'bot' && !isStreaming) {
@@ -126,8 +139,8 @@ function appendMessage(role, text, isStreaming = false) {
   return message
 }
 
-function updateMessage(messageId, text) {
-  const bubble = document.querySelector(`#bubble-${messageId}`)
+function updateMessage(messageElement, text) {
+  const bubble = messageElement.querySelector('.bubble')
   if (bubble) {
     bubble.textContent = text
     scrollToBottom()
@@ -140,10 +153,9 @@ function scrollToBottom() {
   }, 0)
 }
 
-function addActionsToMessage(messageId) {
-  const message = document.querySelector(`#${messageId}`)
-  if (message && !message.querySelector('.message-actions')) {
-    message.appendChild(createActionRow())
+function addActionsToMessage(messageElement) {
+  if (messageElement && !messageElement.querySelector('.message-actions')) {
+    messageElement.appendChild(createActionRow())
   }
 }
 
@@ -202,7 +214,6 @@ chatForm.addEventListener('submit', async (event) => {
   try {
     // Create bot message container
     const botMessage = appendMessage('bot', '', true)
-    const messageId = botMessage.id
     let fullResponse = ''
 
     // Check if streaming is supported
@@ -212,17 +223,17 @@ chatForm.addEventListener('submit', async (event) => {
       
       for await (const chunk of stream) {
         fullResponse += chunk
-        updateMessage(messageId, fullResponse)
+        updateMessage(botMessage, fullResponse)
       }
     } else {
       // Fallback to regular prompt
       const result = await browserSession.prompt(prompt)
       fullResponse = typeof result === 'string' ? result : result?.output || JSON.stringify(result)
-      updateMessage(messageId, fullResponse)
+      updateMessage(botMessage, fullResponse)
     }
 
     // Add action buttons after streaming is complete
-    addActionsToMessage(messageId)
+    addActionsToMessage(botMessage)
     
     setStatus('Model ready', false)
   } catch (error) {
