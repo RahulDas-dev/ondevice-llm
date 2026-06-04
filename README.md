@@ -47,3 +47,4 @@ const response2 = await session.prompt([
 ]);
 console.log(response2);
 ```
+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
