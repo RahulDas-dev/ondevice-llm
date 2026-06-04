@@ -1,19 +1,28 @@
 import './style.css'
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ── Mount SVG symbols from <template> into DOM ──
+  const tpl = document.getElementById('svg-icons')
+  if (tpl) document.body.appendChild(tpl.content.cloneNode(true))
+
   const statusEl      = document.querySelector('#status')
   const chatWindow    = document.querySelector('#chatWindow')
   const chatForm      = document.querySelector('#chatForm')
   const promptInput   = document.querySelector('#promptInput')
   const heroCard      = document.querySelector('#heroCard')
-  const plusButton    = document.querySelector('#plusButton')
-  const loadingIndicator = document.querySelector('#loadingIndicator')
+  const sendButton    = document.querySelector('#sendButton')
+  const imageButton   = document.querySelector('#imageButton')
+  const imageInput    = document.querySelector('#imageInput')
+  const imagePreviewWrap = document.querySelector('#imagePreviewWrap')
+  const imagePreview  = document.querySelector('#imagePreview')
+  const removeImage   = document.querySelector('#removeImage')
 
-  let browserSession = null
-  let hasMessages    = false
-  let isBusy         = false
+  let browserSession  = null
+  let hasMessages     = false
+  let isBusy          = false
+  let pendingImageBlob = null  // raw Blob for Chrome Prompt API
 
-  // ── Download progress bar elements (injected into hero) ──
+  // ── Mount download bar into hero ──
   const dlWrap = document.createElement('div')
   dlWrap.className = 'dl-wrap hidden'
   dlWrap.innerHTML = `
@@ -38,7 +47,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })
 
-  plusButton.addEventListener('click', () => promptInput.focus())
+  // ── Image attach ──
+  imageButton.addEventListener('click', () => imageInput.click())
+
+  imageInput.addEventListener('change', () => {
+    const file = imageInput.files[0]
+    if (!file) return
+    // Store raw Blob — Chrome Prompt API requires Blob, not base64
+    pendingImageBlob = file
+    // Preview via object URL
+    imagePreview.src = URL.createObjectURL(file)
+    imagePreviewWrap.classList.remove('hidden')
+    imageInput.value = ''
+  })
+
+  removeImage.addEventListener('click', () => {
+    pendingImageBlob = null
+    if (imagePreview.src) URL.revokeObjectURL(imagePreview.src)
+    imagePreview.src = ''
+    imagePreviewWrap.classList.add('hidden')
+  })
 
   // ── Status pill ──
   function setStatus(msg, busy = false) {
@@ -47,9 +75,8 @@ document.addEventListener('DOMContentLoaded', () => {
     statusEl.classList.toggle('status-busy', busy)
   }
 
-  // ── Download progress bar ──
+  // ── Download bar ──
   function setDownload(pct) {
-    // pct = null hides the bar, 0–100 shows it
     if (pct === null) {
       dlWrap.classList.add('hidden')
     } else {
@@ -59,8 +86,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function setLoading(visible) {
-    loadingIndicator?.classList.toggle('hidden', !visible)
+  // ── Send / Pause button state ──
+  function setSendState(state) {
+    const use = sendButton.querySelector('use')
+    if (state === 'pause') {
+      use.setAttribute('href', '#icon-pause')
+      use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#icon-pause')
+      sendButton.setAttribute('data-tooltip', 'Stop')
+      sendButton.classList.add('send-pause')
+    } else {
+      use.setAttribute('href', '#icon-send')
+      use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#icon-send')
+      sendButton.setAttribute('data-tooltip', 'Send')
+      sendButton.classList.remove('send-pause')
+    }
   }
 
   // ── Hero hide on first message ──
@@ -71,12 +110,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ── Scroll — page-level, not inner element ──
+  // ── Scroll chat window to bottom ──
   function scrollBottom() {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+    chatWindow.scrollTop = chatWindow.scrollHeight
   }
 
-  // ── Icon builder — references <symbol> elements defined in index.html ──
+  // ── Icon builder — clones from mounted symbols ──
   function makeIcon(id) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('width', '16')
@@ -88,23 +127,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return svg
   }
 
-  // ── Action buttons (copy + regenerate) ──
+  // ── Action buttons ──
   function createActionRow(getBubbleText) {
     const row = document.createElement('div')
     row.className = 'message-actions'
 
     const actions = [
-      { label: 'Copy',       iconId: 'icon-copy'       },
-      { label: 'Regenerate', iconId: 'icon-regenerate'  }
+      { label: 'Copy',       iconId: 'icon-copy',       tooltip: 'Copy'       },
+      { label: 'Regenerate', iconId: 'icon-regenerate',  tooltip: 'Regenerate' }
     ]
 
-    actions.forEach(({ label, iconId }) => {
+    actions.forEach(({ label, iconId, tooltip }) => {
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.className = 'action-button'
       btn.appendChild(makeIcon(iconId))
       btn.setAttribute('aria-label', label)
-      btn.title = label
+      btn.setAttribute('data-tooltip', tooltip)
 
       if (label === 'Copy') {
         btn.addEventListener('click', async () => {
@@ -121,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const msgEl = btn.closest('.message')
           const prev  = msgEl?.previousElementSibling
           if (prev?.classList.contains('user')) {
-            const text = prev.querySelector('.bubble-text')?.textContent || prev.querySelector('.bubble')?.textContent || ''
+            const text = prev.querySelector('.bubble-text')?.textContent || ''
             if (text) {
               promptInput.value = text
               chatForm.dispatchEvent(new Event('submit'))
@@ -135,21 +174,30 @@ document.addEventListener('DOMContentLoaded', () => {
     return row
   }
 
-  // ── Timestamp HH:MM:SS ──
+  // ── Timestamp ──
   function getTimestamp() {
     const now = new Date()
     const pad = (n) => String(n).padStart(2, '0')
     return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   }
 
-  // ── Append a message bubble ──
-  function appendMessage(role, text) {
+  // ── Append message ──
+  function appendMessage(role, text, imgSrc = null) {
     hideHero()
-    const msg    = document.createElement('div')
+    const msg = document.createElement('div')
     msg.className = `message ${role}`
 
     const bubble = document.createElement('div')
     bubble.className = 'bubble'
+
+    // Attached image thumbnail (user side)
+    if (imgSrc) {
+      const thumb = document.createElement('img')
+      thumb.src = imgSrc
+      thumb.className = 'msg-image'
+      thumb.alt = 'Attached image'
+      bubble.appendChild(thumb)
+    }
 
     const textNode = document.createElement('div')
     textNode.className = 'bubble-text'
@@ -162,18 +210,34 @@ document.addEventListener('DOMContentLoaded', () => {
     bubble.appendChild(ts)
 
     msg.appendChild(bubble)
-
     chatWindow.appendChild(msg)
     scrollBottom()
     return { msg, bubble, textNode }
   }
 
-  // ── Destroy session cleanly on tab close / refresh ──
+  // ── Typewriter effect — stops if isBusy is cleared (pause) ──
+  function typewriterEffect(element, text) {
+    return new Promise((resolve) => {
+      const baseDelay = text.length > 400 ? 5 : text.length > 150 ? 10 : 16
+      const chunkSize = baseDelay <= 5 ? 4 : 1
+      let i = 0
+      function tick() {
+        if (!isBusy || i >= text.length) { resolve(); return }
+        element.textContent = text.slice(0, i + chunkSize)
+        i += chunkSize
+        if (i % 30 === 0) scrollBottom()
+        setTimeout(tick, baseDelay)
+      }
+      tick()
+    })
+  }
+
+  // ── Destroy session on unload ──
   window.addEventListener('beforeunload', () => {
     try { browserSession?.destroy?.() } catch (_) {}
   })
 
-  // ── Init: mirrors the working snippet exactly ──
+  // ── Init model ──
   async function initModel(retryCount = 0) {
     if (!window.LanguageModel) {
       setStatus('LanguageModel API not found')
@@ -183,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return
     }
 
-    // Destroy any existing session before creating a new one
     try { browserSession?.destroy?.() } catch (_) {}
     browserSession = null
 
@@ -191,17 +254,20 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus('Checking availability…', true)
       const availability = await LanguageModel.availability()
       console.log('availability =', availability)
-
       setStatus('Loading model…', true)
 
       browserSession = await LanguageModel.create({
+        expectedInputs: [
+          { type: 'text' },
+          { type: 'image' },
+        ],
+        expectedOutputs: [{ type: 'text' }],
         monitor(m) {
           m.addEventListener('downloadprogress', (e) => {
             if (e.total) {
               const pct = (e.loaded / e.total) * 100
               setDownload(pct)
               setStatus(`Downloading model… ${pct.toFixed(1)}%`, true)
-              console.log(`Downloading: ${pct.toFixed(1)}%`)
             }
           })
         }
@@ -215,14 +281,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('Init error:', e)
       setDownload(null)
-
       const msg = e?.message || String(e)
 
-      // "crashed too many times" → wait and auto-retry up to 3 times
       if (msg.includes('crashed') && retryCount < 3) {
         const wait = (retryCount + 1) * 4000
         setStatus(`Model crashed — retrying in ${wait / 1000}s…`, true)
-        console.warn(`Retrying initModel in ${wait}ms (attempt ${retryCount + 1})`)
         setTimeout(() => initModel(retryCount + 1), wait)
         return
       }
@@ -239,34 +302,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-
-  // ── Typewriter effect ──
-  // Reveals text char-by-char. Speeds up for longer responses so it
-  // never feels sluggish: ~18ms/char for short, ~6ms/char for long.
-  function typewriterEffect(element, text) {
-    return new Promise((resolve) => {
-      const baseDelay = text.length > 400 ? 6 : text.length > 150 ? 10 : 18
-      let i = 0
-      function tick() {
-        if (i >= text.length) { resolve(); return }
-        // Write in small chunks so the loop stays smooth
-        const chunkSize = baseDelay <= 6 ? 3 : 1
-        element.textContent = text.slice(0, i + chunkSize)
-        i += chunkSize
-        scrollBottom()
-        setTimeout(tick, baseDelay)
-      }
-      tick()
-    })
-  }
-
   // ── Submit ──
   chatForm.addEventListener('submit', async (event) => {
     event.preventDefault()
-    const prompt = promptInput.value.trim()
-    if (!prompt || isBusy) return
 
-    appendMessage('user', prompt)
+    // If busy, clicking send = pause/abort (best effort)
+    if (isBusy) {
+      isBusy = false
+      setSendState('send')
+      setStatus('Model ready ✓', false)
+      promptInput.disabled = false
+      return
+    }
+
+    const prompt = promptInput.value.trim()
+    if (!prompt && !pendingImageB64) return
+
+    // Capture image before clearing
+    const imgBlob  = pendingImageBlob
+    const imgSrc   = pendingImageBlob ? imagePreview.src : null
+
+    // Clear image attachment
+    if (pendingImageBlob) {
+      pendingImageBlob = null
+      imagePreview.src = ''
+      imagePreviewWrap.classList.add('hidden')
+    }
+
+    appendMessage('user', prompt, imgSrc)
     promptInput.value = ''
     promptInput.style.height = 'auto'
     promptInput.focus()
@@ -277,32 +340,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     isBusy = true
+    setSendState('pause')
     setStatus('Generating…', true)
-    setLoading(true)
     promptInput.disabled = true
 
     try {
-      // Show typing dots while model is thinking
-      const { msg: thinkingMsg, bubble: thinkingBubble } = appendMessage('bot', '')
-      thinkingBubble.querySelector('.bubble-text').innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>'
+      // Show only typing dots, no "Thinking" text
+      const { msg: thinkingMsg, bubble: thinkingBubble, textNode: thinkingText } = appendMessage('bot', '')
+      thinkingText.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>'
       scrollBottom()
 
-      // Fetch full response first (streaming API is unreliable across Chrome versions)
-      const result = await browserSession.prompt(prompt)
+      // Build prompt using Chrome Prompt API multimodal format
+      let result
+      if (imgBlob) {
+        try {
+          result = await browserSession.prompt([
+            {
+              role: 'user',
+              content: [
+                { type: 'text',  value: prompt || 'Describe this image.' },
+                { type: 'image', value: imgBlob },
+              ]
+            }
+          ])
+        } catch (imgErr) {
+          console.warn('Multimodal prompt failed, falling back to text-only:', imgErr)
+          result = await browserSession.prompt(prompt || 'Describe this image.')
+        }
+      } else {
+        result = await browserSession.prompt(prompt)
+      }
+
       const fullText = typeof result === 'string' ? result : result?.output ?? JSON.stringify(result)
 
-      // Typewriter effect — reveal characters progressively
-      const thinkingText = thinkingBubble.querySelector('.bubble-text')
+      // Clear dots, typewrite response
       thinkingText.textContent = ''
       await typewriterEffect(thinkingText, fullText)
 
-      // Update timestamp to when response finished
+      // Update timestamp to completion time
       const tsEl = thinkingMsg.querySelector('.msg-time')
       if (tsEl) tsEl.textContent = getTimestamp()
 
       thinkingMsg.appendChild(createActionRow(() => thinkingText.textContent))
       scrollBottom()
-
       setStatus('Model ready ✓', false)
 
     } catch (e) {
@@ -310,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
       appendMessage('bot', `Error: ${e?.message || e}`)
       setStatus('Error occurred', false)
     } finally {
-      setLoading(false)
+      setSendState('send')
       promptInput.disabled = false
       isBusy = false
     }
