@@ -16,11 +16,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const imagePreviewWrap = document.querySelector('#imagePreviewWrap')
   const imagePreview  = document.querySelector('#imagePreview')
   const removeImage   = document.querySelector('#removeImage')
+  const micButton     = document.querySelector('#micButton')
+  const micIcon       = document.querySelector('#micIcon')
+  const recordingIndicator = document.querySelector('#recordingIndicator')
+  const recTimer      = document.querySelector('#recTimer')
 
   let browserSession  = null
   let hasMessages     = false
   let isBusy          = false
   let pendingImageBlob = null  // raw Blob for Chrome Prompt API
+  let mediaRecorder    = null  // MediaRecorder instance
+  let audioChunks      = []    // recorded audio chunks
+  let isRecording      = false // mic recording state
+  let recTimerInterval = null  // recording timer interval
+  let recSeconds       = 0     // elapsed recording seconds
+  let pendingAudioBlob = null  // recorded audio blob to send
 
   // ── Mount download bar into hero ──
   const dlWrap = document.createElement('div')
@@ -67,6 +77,99 @@ document.addEventListener('DOMContentLoaded', () => {
     imagePreview.src = ''
     imagePreviewWrap.classList.add('hidden')
   })
+
+  // ── Microphone recording ──
+  micButton.addEventListener('click', async () => {
+    if (!isRecording) {
+      await startRecording()
+    } else {
+      stopRecording()
+    }
+  })
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioChunks = []
+      mediaRecorder = new MediaRecorder(stream)
+
+      mediaRecorder.addEventListener('dataavailable', (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data)
+      })
+
+      mediaRecorder.addEventListener('stop', () => {
+        // Stop all tracks to release mic
+        stream.getTracks().forEach(t => t.stop())
+
+        pendingAudioBlob = new Blob(audioChunks, { type: 'audio/webm' })
+        audioChunks = []
+
+        // Auto-submit if we have audio
+        if (pendingAudioBlob.size > 0) {
+          chatForm.dispatchEvent(new Event('submit'))
+        }
+      })
+
+      mediaRecorder.start()
+      isRecording = true
+      setMicState('recording')
+      startRecTimer()
+
+    } catch (err) {
+      console.error('Mic error:', err)
+      if (err.name === 'NotAllowedError') {
+        appendMessage('bot', 'Microphone access denied. Please allow microphone permissions in your browser.')
+      } else {
+        appendMessage('bot', `Microphone error: ${err.message}`)
+      }
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop()
+    }
+    isRecording = false
+    setMicState('idle')
+    stopRecTimer()
+  }
+
+  function setMicState(state) {
+    const use = micIcon.querySelector('use')
+    if (state === 'recording') {
+      use.setAttribute('href', '#icon-mic-active')
+      use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#icon-mic-active')
+      micButton.classList.add('mic-recording')
+      micButton.setAttribute('data-tooltip', 'Stop recording')
+      recordingIndicator.classList.remove('hidden')
+    } else {
+      use.setAttribute('href', '#icon-mic')
+      use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#icon-mic')
+      micButton.classList.remove('mic-recording')
+      micButton.setAttribute('data-tooltip', 'Hold to record')
+      recordingIndicator.classList.add('hidden')
+    }
+  }
+
+  function startRecTimer() {
+    recSeconds = 0
+    recTimer.textContent = '0:00'
+    recTimerInterval = setInterval(() => {
+      recSeconds++
+      const m = Math.floor(recSeconds / 60)
+      const s = String(recSeconds % 60).padStart(2, '0')
+      recTimer.textContent = `${m}:${s}`
+      // Auto-stop at 60 seconds
+      if (recSeconds >= 60) stopRecording()
+    }, 1000)
+  }
+
+  function stopRecTimer() {
+    clearInterval(recTimerInterval)
+    recTimerInterval = null
+    recSeconds = 0
+    recTimer.textContent = '0:00'
+  }
 
   // ── Status pill ──
   function setStatus(msg, busy = false) {
@@ -260,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
         expectedInputs: [
           { type: 'text' },
           { type: 'image' },
+          { type: 'audio' },
         ],
         expectedOutputs: [{ type: 'text' }],
         monitor(m) {
@@ -316,20 +420,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const prompt = promptInput.value.trim()
-    if (!prompt && !pendingImageB64) return
+    if (!prompt && !pendingImageBlob && !pendingAudioBlob) return
 
-    // Capture image before clearing
-    const imgBlob  = pendingImageBlob
-    const imgSrc   = pendingImageBlob ? imagePreview.src : null
+    // Capture image + audio before clearing
+    const imgBlob   = pendingImageBlob
+    const imgSrc    = pendingImageBlob ? imagePreview.src : null
+    const audioBlob = pendingAudioBlob
 
-    // Clear image attachment
+    // Clear attachments
     if (pendingImageBlob) {
       pendingImageBlob = null
       imagePreview.src = ''
       imagePreviewWrap.classList.add('hidden')
     }
+    if (pendingAudioBlob) {
+      pendingAudioBlob = null
+    }
 
-    appendMessage('user', prompt, imgSrc)
+    const displayText = prompt || (audioBlob ? '🎤 Voice message' : '')
+    appendMessage('user', displayText, imgSrc)
     promptInput.value = ''
     promptInput.style.height = 'auto'
     promptInput.focus()
@@ -352,20 +461,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Build prompt using Chrome Prompt API multimodal format
       let result
-      if (imgBlob) {
+      if (imgBlob && audioBlob) {
+        // Both image and audio
         try {
-          result = await browserSession.prompt([
-            {
-              role: 'user',
-              content: [
-                { type: 'text',  value: prompt || 'Describe this image.' },
-                { type: 'image', value: imgBlob },
-              ]
-            }
-          ])
-        } catch (imgErr) {
-          console.warn('Multimodal prompt failed, falling back to text-only:', imgErr)
+          result = await browserSession.prompt([{
+            role: 'user',
+            content: [
+              { type: 'text',  value: prompt || 'Describe what you see and hear.' },
+              { type: 'image', value: imgBlob },
+              { type: 'audio', value: audioBlob },
+            ]
+          }])
+        } catch {
+          result = await browserSession.prompt(prompt || 'Describe what you see and hear.')
+        }
+      } else if (imgBlob) {
+        // Image only
+        try {
+          result = await browserSession.prompt([{
+            role: 'user',
+            content: [
+              { type: 'text',  value: prompt || 'Describe this image.' },
+              { type: 'image', value: imgBlob },
+            ]
+          }])
+        } catch {
           result = await browserSession.prompt(prompt || 'Describe this image.')
+        }
+      } else if (audioBlob) {
+        // Audio only — convert AudioBuffer via Chrome Prompt API
+        try {
+          result = await browserSession.prompt([{
+            role: 'user',
+            content: [
+              { type: 'text',  value: prompt || 'Transcribe or respond to this audio.' },
+              { type: 'audio', value: audioBlob },
+            ]
+          }])
+        } catch (audioErr) {
+          console.warn('Audio prompt failed, falling back to text:', audioErr)
+          result = await browserSession.prompt(prompt || 'I sent you an audio message but audio is not supported.')
         }
       } else {
         result = await browserSession.prompt(prompt)
