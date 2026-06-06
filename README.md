@@ -191,3 +191,9 @@ MIT © [Rahul Das](https://github.com/RahulDas-dev)
 Built with the [Chrome Prompt API](https://developer.chrome.com/docs/ai/built-in) · Deployed on [GitHub Pages](https://pages.github.com/)
 
 </div>
+
+
+# Next 
+- Fix the header 
+- Header should span entire screen but centering is correct
+- Fix the Token  conter +  new Chat button  

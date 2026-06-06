@@ -189,6 +189,67 @@ document.addEventListener('DOMContentLoaded', () => {
     recTimer.textContent = '0:00'
   }
 
+  // ── Token usage display ──
+  function updateTokens() {
+    if (!browserSession) return
+    const used = browserSession.tokensSoFar   ?? 0
+    const max  = browserSession.maxTokens     ?? 0
+    const left = browserSession.tokensLeft    ?? (max - used)
+    tokenUsed.textContent = used.toLocaleString()
+    tokenMax.textContent  = max  ? max.toLocaleString() : '–'
+    if (max > 0) {
+      const pct = Math.min((used / max) * 100, 100)
+      tokenBarFill.style.width = `${pct}%`
+      // Colour shifts: green → amber → red
+      tokenBarFill.style.background =
+        pct > 85 ? '#dc2626' :
+        pct > 60 ? '#d97706' : 'var(--accent)'
+    }
+  }
+
+  // ── Header visibility ──
+  function showHeader() {
+    appHeader.classList.remove('hidden')
+  }
+
+  // ── Reset conversation ──
+  async function resetConversation() {
+    if (isBusy) return
+
+    // Stop any active recording
+    if (isRecording) stopRecording()
+
+    // Clear chat messages
+    chatWindow.innerHTML = ''
+    hasMessages = false
+
+    // Clear pending attachments
+    pendingImageBlob = null
+    pendingAudioBlob = null
+    if (imagePreview.src) URL.revokeObjectURL(imagePreview.src)
+    imagePreview.src = ''
+    imagePreviewWrap.classList.add('hidden')
+
+    // Show hero, hide header
+    heroCard.style.display = ''
+    appHeader.classList.add('hidden')
+
+    // Reset token display
+    tokenUsed.textContent = '0'
+    tokenMax.textContent  = '–'
+    tokenBarFill.style.width = '0%'
+
+    // Destroy old session and start fresh
+    setInputsEnabled(false)
+    setStatus('Starting new session…', true)
+    try { browserSession?.destroy?.() } catch (_) {}
+    browserSession = null
+
+    await initModel()
+  }
+
+  resetButton.addEventListener('click', resetConversation)
+
   // ── Status pill ──
   function setStatus(msg, busy = false) {
     if (!statusEl) return
@@ -223,11 +284,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ── Hero hide on first message ──
+  // ── Hero hide on first message, show header ──
   function hideHero() {
     if (!hasMessages && heroCard) {
       heroCard.style.display = 'none'
       hasMessages = true
+      showHeader()
     }
   }
 
@@ -538,6 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       thinkingMsg.appendChild(createActionRow(() => thinkingText.textContent))
       scrollBottom()
+      updateTokens()
       setStatus('Model ready ✓', false)
 
     } catch (e) {
