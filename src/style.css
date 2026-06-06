@@ -727,3 +727,42 @@ h1 {
 .rec-label {
   color: var(--text-muted);
 }
+
+/* ── Input locked state (model not ready) ── */
+.input-locked {
+  position: relative;
+  pointer-events: none;
+  user-select: none;
+}
+
+.input-locked::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0.6;
+  border-radius: inherit;
+  z-index: 20;
+  cursor: not-allowed;
+}
+
+.input-locked .input-row {
+  opacity: 0.45;
+  filter: grayscale(0.3);
+}
+
+.input-locked .prompt-input::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Disabled individual elements */
+.prompt-input:disabled {
+  cursor: not-allowed;
+}
+
+.icon-button:disabled,
+.send-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

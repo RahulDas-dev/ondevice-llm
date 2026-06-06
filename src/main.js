@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const chatForm      = document.querySelector('#chatForm')
   const promptInput   = document.querySelector('#promptInput')
   const heroCard      = document.querySelector('#heroCard')
+  const inputCard     = document.querySelector('.input-card')
   const sendButton    = document.querySelector('#sendButton')
   const imageButton   = document.querySelector('#imageButton')
   const imageInput    = document.querySelector('#imageInput')
@@ -42,6 +43,23 @@ document.addEventListener('DOMContentLoaded', () => {
   heroCard.appendChild(dlWrap)
   const dlLabel = document.querySelector('#dlLabel')
   const dlFill  = document.querySelector('#dlFill')
+
+  // ── Lock / unlock entire input area ──
+  function setInputsEnabled(enabled) {
+    promptInput.disabled   = !enabled
+    micButton.disabled     = !enabled
+    imageButton.disabled   = !enabled
+    sendButton.disabled    = !enabled
+    promptInput.placeholder = enabled ? 'Write a message…' : 'Waiting for model to load…'
+    if (enabled) {
+      inputCard.classList.remove('input-locked')
+    } else {
+      inputCard.classList.add('input-locked')
+    }
+  }
+
+  // Lock immediately on page load
+  setInputsEnabled(false)
 
   // ── Auto-resize textarea ──
   promptInput.addEventListener('input', () => {
@@ -380,6 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window.browserSession = browserSession
       setDownload(null)
       setStatus('Model ready ✓', false)
+      setInputsEnabled(true)
       console.log('session created')
 
     } catch (e) {
@@ -394,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return
       }
 
+      setInputsEnabled(false)
       setStatus('Initialization failed')
       appendMessage('bot',
         `Initialization error: ${msg}\n\n` +
@@ -526,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus('Error occurred', false)
     } finally {
       setSendState('send')
-      promptInput.disabled = false
+      setInputsEnabled(true)
       isBusy = false
     }
   })
